@@ -1,0 +1,70 @@
+
+/* Load the downloaded font */
+@font-face {
+    font-family: "Transcity";
+    src: url("fonts/transcity.otf") format("opentype");
+    font-weight: normal;
+    font-style: normal;
+}
+
+/* Import JetBrains Mono */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Body */
+body {
+    font-family: "JetBrains Mono", monospace;
+    background: linear-gradient(to bottom, #55A9A0, #AEEED3);
+    min-height: 100vh;
+    color: white;
+}
+
+/* Header */
+header {
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 40px 20px;
+    background: #287A74;
+    color: white;
+    border-radius: 0 0 40px 40px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Logo */
+header h1 {
+    font-family: "Transcity", sans-serif;
+    font-size: 6rem;
+    font-weight: normal;
+}
+
+/* Tagline */
+header p {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 1rem;
+}
+
+/* Responsive header */
+@media (max-width: 600px) {
+    header h1 {
+        font-size: 3.5rem;
+    }
+
+    header p {
+        font-size: 0.8rem;
+    }
+}
+.task-created {
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 8px;
+}

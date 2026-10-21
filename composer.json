@@ -1,0 +1,10 @@
+
+{
+    "name": "ghianne/procrastinot",
+    "description": "A simple PHP and MySQL to-do list with DSA implementations",
+    "autoload": {
+        "psr-4": {
+            "procrastinot\\": "src/"
+        }
+    }
+}
