@@ -1,0 +1,4 @@
+USE procrastinot;
+
+ALTER TABLE tasks
+    ADD COLUMN deletedAt DATETIME NULL DEFAULT NULL;

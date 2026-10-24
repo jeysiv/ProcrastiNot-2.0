@@ -15,6 +15,8 @@ function e($value): string {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+$formError = $_GET['error'] ?? '';
+
 // Get the task to edit, if an Edit button was clicked
 $editTask = null;
 
@@ -22,7 +24,7 @@ if (isset($_GET['edit']) && ctype_digit($_GET['edit'])) {
     $taskID = (int) $_GET['edit'];
 
     $stmt = $conn->prepare(
-        "SELECT * FROM tasks WHERE taskID = ?"
+        "SELECT * FROM tasks WHERE taskID = ? AND deletedAt IS NULL"
     );
 
     $stmt->bind_param("i", $taskID);
@@ -35,19 +37,24 @@ if (isset($_GET['edit']) && ctype_digit($_GET['edit'])) {
 }
 
 // Retrieve all tasks from the database
-$taskResult = $conn->query("SELECT * FROM tasks");
+$taskResult = $conn->query("SELECT * FROM tasks WHERE deletedAt IS NULL");
 
 $tasks = [];
+$completedTasks = [];
 
 if ($taskResult){
     while ($row = $taskResult -> fetch_assoc()){
-        $tasks[] = $row;
+        if ($row['status'] === 'Completed') {
+            $completedTasks[] = $row;
+        } else {
+            $tasks[] = $row;
+        }
     }
 }
 
 $taskBST = new TaskBST();
 
-foreach ($tasks as $task) {
+foreach (array_merge($tasks, $completedTasks) as $task) {
     $taskBST->insert($task);
 }
 // Check a task ID if one was provided in the URL
@@ -106,7 +113,7 @@ if ($queueOrder === 'latest') {
     <title>ProcrastiNot | To-Do List</title>
 
     <!-- <link rel="stylesheet" href="style.css"> -->
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=completed-menu">
 </head>
 
 <body>
@@ -127,6 +134,12 @@ if ($queueOrder === 'latest') {
             </h2>
 
             <form method="POST" action="process.php">
+
+                <?php if ($formError === 'invalid_due_date'): ?>
+                    <p class="empty-message" role="alert">
+                        Please choose today or a future date for the due date.
+                    </p>
+                <?php endif; ?>
 
                 <!-- Tell process.php what action to perform -->
                 <input
@@ -172,6 +185,7 @@ if ($queueOrder === 'latest') {
                     type="date"
                     id="due_date"
                     name="due_date"
+                    min="<?= e((new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->format('Y-m-d')) ?>"
                     value="<?= e($editTask['due_date'] ?? '') ?>"
                 >
 
@@ -238,7 +252,7 @@ if ($queueOrder === 'latest') {
         </section>
 
         <!-- Task List -->
-        <section class="task-list-section">
+        <section class="task-list-section" id="tasks">
 
             <h2>My Tasks</h2>
 
@@ -349,7 +363,7 @@ if ($queueOrder === 'latest') {
 
             <?php endif; ?>
 
-            <?php if (!empty($tasks)): ?>
+            <?php if (!$checkedID && !empty($tasks)): ?>
 
                 <div class="task-list">
 
@@ -361,6 +375,10 @@ if ($queueOrder === 'latest') {
 
                                 <!-- Task Title -->
                                 <h3><?= e($task['title']) ?></h3>
+
+                                <p class="task-id">
+                                    Task ID: <?= e($task['taskID']) ?>
+                                </p>
 
                                 <!-- Task Description -->
                                 <?php if (!empty($task['description'])): ?>
@@ -477,7 +495,7 @@ if ($queueOrder === 'latest') {
 
                 </div>
 
-            <?php else: ?>
+            <?php elseif (!$checkedID): ?>
 
             <p class="empty-message">
                 <?= $keyword !== ''
@@ -491,5 +509,145 @@ if ($queueOrder === 'latest') {
 
     </main>
 
+    <div class="completed-menu">
+        <button type="button" class="completed-trigger" id="completed-trigger" aria-label="Open completed tasks" title="Open completed tasks" aria-expanded="false" aria-controls="completed-popover">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M9 12.5 11.5 15 16 9.5M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" />
+            </svg>
+            <span class="completed-count"><?= count($completedTasks) ?></span>
+        </button>
+
+        <section class="completed-popover" id="completed-popover" aria-label="Completed task names" hidden>
+            <?php if ($completedTasks): ?>
+                <ul>
+                    <?php foreach ($completedTasks as $completedTask): ?>
+                        <li><?= e($completedTask['title']) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php else: ?>
+                <p>No completed tasks.</p>
+            <?php endif; ?>
+        </section>
+    </div>
+
+<script>
+    (() => {
+        const scrollPositionKey = 'procrastinot-scroll-y';
+        history.scrollRestoration = 'manual';
+
+        async function updateTaskList(url, addHistoryEntry = true) {
+            try {
+                const response = await fetch(url, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Could not load task results.');
+                }
+
+                const page = new DOMParser().parseFromString(
+                    await response.text(),
+                    'text/html'
+                );
+                const updatedList = page.querySelector('.task-list-section');
+                const currentList = document.querySelector('.task-list-section');
+
+                if (!updatedList || !currentList) {
+                    throw new Error('Task results were not found.');
+                }
+
+                currentList.replaceWith(updatedList);
+
+                if (addHistoryEntry) {
+                    history.pushState({}, '', url);
+                }
+            } catch (error) {
+                window.location.assign(url);
+            }
+        }
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target;
+
+            if (!(form instanceof HTMLFormElement)
+                || !form.closest('.task-list-section')
+                || form.method.toUpperCase() !== 'GET') {
+                return;
+            }
+
+            event.preventDefault();
+            const formData = new FormData(form);
+            if (event.submitter?.name) {
+                formData.append(event.submitter.name, event.submitter.value);
+            }
+            const params = new URLSearchParams(formData);
+            const url = new URL(form.action, window.location.href);
+            url.search = params.toString();
+            url.hash = '';
+            updateTaskList(url);
+        });
+
+        document.addEventListener('click', (event) => {
+            const link = event.target instanceof Element
+                ? event.target.closest('.task-list-section a[href="index.php"]')
+                : null;
+
+            if (!link || event.button !== 0 || event.ctrlKey || event.metaKey
+                || event.shiftKey || event.altKey) {
+                return;
+            }
+
+            event.preventDefault();
+            updateTaskList(new URL(link.href, window.location.href));
+        });
+
+        window.addEventListener('popstate', () => {
+            updateTaskList(window.location.href, false);
+        });
+
+        const completedTrigger = document.getElementById('completed-trigger');
+        const completedPopover = document.getElementById('completed-popover');
+        const setCompletedMenuOpen = (isOpen) => {
+            completedPopover.hidden = !isOpen;
+            completedTrigger.setAttribute('aria-expanded', String(isOpen));
+            completedTrigger.setAttribute(
+                'aria-label',
+                isOpen ? 'Close completed tasks' : 'Open completed tasks'
+            );
+            completedTrigger.title = isOpen ? 'Close completed tasks' : 'Open completed tasks';
+            completedTrigger.classList.toggle('is-open', isOpen);
+        };
+
+        completedTrigger.addEventListener('click', () => {
+            setCompletedMenuOpen(completedPopover.hidden);
+        });
+        document.addEventListener('click', (event) => {
+            if (!completedPopover.hidden
+                && !completedPopover.contains(event.target)
+                && !completedTrigger.contains(event.target)) {
+                setCompletedMenuOpen(false);
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !completedPopover.hidden) {
+                setCompletedMenuOpen(false);
+                completedTrigger.focus();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            sessionStorage.setItem(scrollPositionKey, String(window.scrollY));
+        });
+
+        window.addEventListener('load', () => {
+            const savedPosition = sessionStorage.getItem(scrollPositionKey);
+
+            if (savedPosition !== null) {
+                sessionStorage.removeItem(scrollPositionKey);
+                requestAnimationFrame(() => window.scrollTo(0, Number(savedPosition)));
+            }
+        });
+    })();
+</script>
 </body>
 </html>

@@ -2,6 +2,27 @@
 <?php
 require_once 'config.php';
 
+function isValidDueDate(string $dueDate): bool
+{
+    if ($dueDate === '') {
+        return true;
+    }
+
+    $date = DateTimeImmutable::createFromFormat(
+        '!Y-m-d',
+        $dueDate,
+        new DateTimeZone('Asia/Manila')
+    );
+    $errors = DateTimeImmutable::getLastErrors();
+
+    return $date !== false
+        && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))
+        && $date->format('Y-m-d') === $dueDate
+        && $dueDate >= (new DateTimeImmutable('today', new DateTimeZone('Asia/Manila')))->format('Y-m-d');
+}
+
+$dateError = false;
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: index.php');
     exit;
@@ -16,7 +37,11 @@ if ($action === 'add') {
     $dueDate = $_POST['due_date'] ?? '';
     $priority = $_POST['priority'] ?? 'Medium';
 
-    if ($title !== '' &&
+    if (!is_string($dueDate) || !isValidDueDate($dueDate)) {
+        $dateError = true;
+    }
+
+    if (!$dateError && $title !== '' &&
         in_array($priority, ['Low', 'Medium', 'High'], true)) {
 
         $dueDate = $dueDate !== '' ? $dueDate : null;
@@ -49,7 +74,11 @@ elseif ($action === 'edit') {
     $priority = $_POST['priority'] ?? 'Medium';
     $status = $_POST['status'] ?? 'Pending';
 
-    if ($taskID > 0 && $title !== '' &&
+    if (!is_string($dueDate) || !isValidDueDate($dueDate)) {
+        $dateError = true;
+    }
+
+    if (!$dateError && $taskID > 0 && $title !== '' &&
         in_array($priority, ['Low', 'Medium', 'High'], true) &&
         in_array($status, ['Pending', 'Completed'], true)) {
 
@@ -59,7 +88,7 @@ elseif ($action === 'edit') {
             "UPDATE tasks
             SET title = ?, description = ?, due_date = ?,
                 priority = ?, status = ?
-            WHERE taskID = ?"
+            WHERE taskID = ? AND deletedAt IS NULL"
         );
 
         $stmt->bind_param(
@@ -83,7 +112,7 @@ elseif ($action === 'delete') {
 
     if ($taskID > 0) {
         $stmt = $conn->prepare(
-            "DELETE FROM tasks WHERE taskID = ?"
+            "DELETE FROM tasks WHERE taskID = ? AND deletedAt IS NULL"
         );
 
         $stmt->bind_param("i", $taskID);
@@ -101,7 +130,7 @@ elseif ($action === 'toggle') {
         in_array($status, ['Pending', 'Completed'], true)) {
 
         $stmt = $conn->prepare(
-            "UPDATE tasks SET status = ? WHERE taskID = ?"
+            "UPDATE tasks SET status = ? WHERE taskID = ? AND deletedAt IS NULL"
         );
 
         $stmt->bind_param("si", $status, $taskID);
@@ -111,6 +140,16 @@ elseif ($action === 'toggle') {
 }
 
 $conn->close();
+
+if ($dateError) {
+    $redirect = 'index.php?error=invalid_due_date';
+    if ($action === 'edit' && isset($taskID) && $taskID > 0) {
+        $redirect .= '&edit=' . $taskID;
+    }
+
+    header('Location: ' . $redirect);
+    exit;
+}
 
 header('Location: index.php');
 exit;
