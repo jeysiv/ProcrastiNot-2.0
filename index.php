@@ -517,11 +517,11 @@ if ($queueOrder === 'latest') {
             <span class="completed-count"><?= count($completedTasks) ?></span>
         </button>
 
-        <section class="completed-popover" id="completed-popover" aria-label="Completed task names" hidden>
+        <section class="completed-popover" id="completed-popover" aria-label="Completed tasks and IDs" hidden>
             <?php if ($completedTasks): ?>
                 <ul>
                     <?php foreach ($completedTasks as $completedTask): ?>
-                        <li><?= e($completedTask['title']) ?></li>
+                        <li>Task #<?= e($completedTask['taskID']) ?> — <?= e($completedTask['title']) ?></li>
                     <?php endforeach; ?>
                 </ul>
             <?php else: ?>
